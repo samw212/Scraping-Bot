@@ -1,0 +1,100 @@
+# Browser fingerprint profiles.
+#
+# Each worker session picks a profile (weighted) and pairs it with a proxy;
+# that (profile, proxy) pair is an "identity" with its own cookie jar.
+#
+# Rules for profiles that survive serious bot detection:
+#   * Keep everything internally consistent: UA OS == platform == ua_platform
+#     == WebGL renderer family == screen size typical for that device.
+#   * Use {chrome_major}: the UA version must match the real Chromium build
+#     (detected at runtime), otherwise feature-detection exposes the lie.
+#   * Prefer a profile whose OS matches the host the browser really runs on.
+#     Fonts, emoji rendering and Web Worker `navigator.platform` cannot be
+#     spoofed by JS and still reveal the real OS (Linux in Docker).
+#   * deviceMemory is capped at 8 by Chrome; never use larger values.
+#   * timezone: auto -> taken from the Gluetun exit IP, so clock and IP agree.
+
+profiles:
+  - name: linux-chrome-amd
+    weight: 3                      # matches the Docker host OS: most consistent
+    user_agent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{chrome_major}.0.0.0 Safari/537.36"
+    platform: "Linux x86_64"
+    ua_platform: "Linux"
+    ua_platform_version: "6.8.0"
+    architecture: "x86"
+    bitness: "64"
+    locale: en-US
+    languages: [en-US, en]
+    timezone: auto
+    viewport: {width: 1920, height: 963}
+    screen: {width: 1920, height: 1080, avail_height: 1050, color_depth: 24, window_chrome_height: 87}
+    device_scale_factor: 1
+    hardware_concurrency: 12
+    device_memory: 8
+    webgl:
+      vendor: "Google Inc. (AMD)"
+      renderer: "ANGLE (AMD, AMD Radeon RX 6600 (radeonsi navi23 LLVM 15.0.7), OpenGL 4.6)"
+      parameters:
+        3379: 16384                 # MAX_TEXTURE_SIZE
+
+  - name: win11-chrome-nvidia
+    weight: 2
+    user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{chrome_major}.0.0.0 Safari/537.36"
+    platform: "Win32"
+    ua_platform: "Windows"
+    ua_platform_version: "15.0.0"  # Windows 11 reports 13+ here; Windows 10 reports 10.0.0
+    architecture: "x86"
+    bitness: "64"
+    locale: en-US
+    languages: [en-US, en]
+    timezone: auto
+    viewport: {width: 1920, height: 953}
+    screen: {width: 1920, height: 1080, avail_height: 1032, color_depth: 24, window_chrome_height: 79}
+    device_scale_factor: 1
+    hardware_concurrency: 16
+    device_memory: 8
+    webgl:
+      vendor: "Google Inc. (NVIDIA)"
+      renderer: "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 (0x00002504) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+      parameters:
+        3379: 16384
+
+  - name: win10-chrome-intel-laptop
+    weight: 2
+    user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{chrome_major}.0.0.0 Safari/537.36"
+    platform: "Win32"
+    ua_platform: "Windows"
+    ua_platform_version: "10.0.0"
+    architecture: "x86"
+    bitness: "64"
+    locale: en-US
+    languages: [en-US, en]
+    timezone: auto
+    viewport: {width: 1536, height: 745}
+    screen: {width: 1536, height: 864, avail_height: 824, color_depth: 24, window_chrome_height: 79}
+    device_scale_factor: 1.25
+    hardware_concurrency: 8
+    device_memory: 8
+    webgl:
+      vendor: "Google Inc. (Intel)"
+      renderer: "ANGLE (Intel, Intel(R) UHD Graphics 620 (0x00005917) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+
+  - name: macos-chrome-m2
+    weight: 1
+    user_agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{chrome_major}.0.0.0 Safari/537.36"
+    platform: "MacIntel"             # Chrome on Apple Silicon still reports MacIntel
+    ua_platform: "macOS"
+    ua_platform_version: "15.1.0"
+    architecture: "arm"
+    bitness: "64"
+    locale: en-US
+    languages: [en-US, en]
+    timezone: auto
+    viewport: {width: 1512, height: 857}
+    screen: {width: 1512, height: 982, avail_height: 944, color_depth: 30, window_chrome_height: 87}
+    device_scale_factor: 2
+    hardware_concurrency: 8
+    device_memory: 8
+    webgl:
+      vendor: "Google Inc. (Apple)"
+      renderer: "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)"

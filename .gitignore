@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+
+# runtime state & secrets
+data/
+.env
+config/config.yaml
+gluetun/auth/config.toml
+*.png

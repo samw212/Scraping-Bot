@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scrapebot"
+version = "0.1.0"
+description = "Orchestrated fleet of stealth Playwright scraping bots with Gluetun VPN proxies and scrape limits"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "playwright>=1.49",
+  "playwright-stealth>=2.0.3,<3",
+  "pydantic>=2.6,<3",
+  "PyYAML>=6.0",
+  "httpx>=0.27",
+  "parsel>=1.9",
+]
+
+[project.optional-dependencies]
+patchright = ["patchright>=1.48"]
+dev = ["pytest>=8", "pytest-asyncio>=0.24"]
+
+[project.scripts]
+scrapebot = "scrapebot.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["scrapebot*"]
+
+[tool.setuptools.package-data]
+"scrapebot.stealth" = ["*.js"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+markers = ["browser: needs a Playwright Chromium install (skipped automatically if missing)"]

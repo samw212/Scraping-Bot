@@ -1,0 +1,82 @@
+# Fleet: N Gluetun VPN containers (one exit IP each) + the scrapebot orchestrator.
+#
+#   cp .env.example .env              # VPN provider credentials, API key, proxy password
+#   cp config/config.example.yaml config/config.yaml
+#   docker compose up -d gluetun-1 gluetun-2 gluetun-3
+#   docker compose run --rm scraper proxies        # exit IPs / geo / health
+#   docker compose run --rm scraper fingerprint    # what sites will see
+#   docker compose up scraper
+#
+# Add capacity by copying a gluetun-N service and adding it under
+# `proxies.gluetun` in config.yaml.
+
+name: scrapebot
+
+x-gluetun: &gluetun
+  image: qmcgaw/gluetun:${GLUETUN_TAG:-v3}
+  cap_add: [NET_ADMIN]
+  devices: ["/dev/net/tun:/dev/net/tun"]
+  restart: unless-stopped
+  networks: [scrape]
+  # Uncomment to reach a container from the host (scrapebot running outside Docker):
+  # ports: ["127.0.0.1:8881:8888", "127.0.0.1:8001:8000"]
+
+x-gluetun-env: &gluetun-env
+  VPN_SERVICE_PROVIDER: ${VPN_SERVICE_PROVIDER:?set VPN_SERVICE_PROVIDER in .env}
+  VPN_TYPE: ${VPN_TYPE:-wireguard}
+  WIREGUARD_PRIVATE_KEY: ${WIREGUARD_PRIVATE_KEY:-}
+  WIREGUARD_ADDRESSES: ${WIREGUARD_ADDRESSES:-}
+  OPENVPN_USER: ${OPENVPN_USER:-}
+  OPENVPN_PASSWORD: ${OPENVPN_PASSWORD:-}
+  # Built-in HTTP proxy that Chromium connects through.
+  HTTPPROXY: "on"
+  HTTPPROXY_STEALTH: "on"          # don't add Via / X-Forwarded-For style proxy headers
+  HTTPPROXY_USER: ${GLUETUN_PROXY_USER:-}
+  HTTPPROXY_PASSWORD: ${GLUETUN_PROXY_PASSWORD:-}
+  # Control server (:8000) is private by default; one API key for all routes.
+  # For per-route roles mount a config.toml instead (see gluetun/auth/config.toml.example).
+  HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE: '{"auth":"apikey","apikey":"${GLUETUN_API_KEY:?set GLUETUN_API_KEY in .env}"}'
+  TZ: UTC
+
+services:
+  gluetun-1:
+    <<: *gluetun
+    environment:
+      <<: *gluetun-env
+      SERVER_COUNTRIES: ${GLUETUN_1_COUNTRIES:-United States}
+
+  gluetun-2:
+    <<: *gluetun
+    environment:
+      <<: *gluetun-env
+      SERVER_COUNTRIES: ${GLUETUN_2_COUNTRIES:-Canada}
+
+  gluetun-3:
+    <<: *gluetun
+    environment:
+      <<: *gluetun-env
+      SERVER_COUNTRIES: ${GLUETUN_3_COUNTRIES:-United Kingdom}
+
+  scraper:
+    build: .
+    image: scrapebot:latest
+    depends_on:
+      gluetun-1: {condition: service_healthy}
+      gluetun-2: {condition: service_healthy}
+      gluetun-3: {condition: service_healthy}
+    environment:
+      GLUETUN_API_KEY: ${GLUETUN_API_KEY}
+      GLUETUN_PROXY_USER: ${GLUETUN_PROXY_USER:-}
+      GLUETUN_PROXY_PASSWORD: ${GLUETUN_PROXY_PASSWORD:-}
+      HEADFUL: ${HEADFUL:-1}
+      TZ: UTC
+    volumes:
+      - ./config:/app/config:ro
+      - ./data:/app/data
+    shm_size: 2gb                  # Chromium needs a large /dev/shm
+    init: true                     # reap Chromium child processes
+    stop_grace_period: 60s         # let workers finish the current page
+    networks: [scrape]
+
+networks:
+  scrape: {}

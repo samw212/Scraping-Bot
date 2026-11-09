@@ -1,0 +1,156 @@
+# scrapebot configuration.
+#
+# Copy to config/config.yaml and adjust. ${VAR} / ${VAR:-default} pull values
+# from the environment (see .env.example), so secrets stay out of this file.
+#
+# The demo target is quotes.toscrape.com, a sandbox site built for scraping
+# practice. Replace `targets` with your own site. Only scrape sites whose terms
+# allow it, and keep the limits below polite.
+
+run:
+  name: quotes-demo
+  data_dir: ./data                 # SQLite queue/state, cookie jars, output, stats.json
+  log_level: INFO
+  log_json: false
+  stats_interval_s: 30
+  seed: null                       # set an int for reproducible randomness
+
+orchestrator:
+  workers: 3                       # concurrent bots (each = one browser + one identity)
+  idle_poll_s: 2
+  shutdown_grace_s: 30
+
+# --------------------------------------------------------------------- browser
+browser:
+  engine: playwright               # playwright | patchright (pip install patchright)
+  channel: chromium                # new headless mode; "chrome" = installed Google Chrome; null = legacy headless shell (weak)
+  executable_path: null
+  headless: true                   # headful under Xvfb (HEADFUL=1 in Docker) is harder to detect
+  version: auto                    # UA/client hints follow the real browser version
+  args: []                         # extra Chromium flags
+  ignore_default_args: ["--enable-automation"]
+  navigation_timeout_s: 45
+  wait_until: domcontentloaded
+  block_resources: []              # e.g. [image, media, font] — saves bandwidth but is detectable
+  persist_storage: true            # keep cookies/localStorage per identity between sessions
+  clear_storage_on_block: true
+
+# --------------------------------------------------------------------- stealth
+stealth:
+  playwright_stealth: true         # base evasion bundle (window.chrome, plugins, permissions, ...)
+  playwright_stealth_options: {}   # passthrough to playwright_stealth.Stealth(...)
+  client_hints: true               # native UA + Sec-CH-UA* + navigator.userAgentData via CDP
+  webgl: true                      # WebGL vendor/renderer/params from the profile
+  hardware: true                   # hardwareConcurrency / deviceMemory / maxTouchPoints
+  screen: true                     # screen.avail*, colorDepth, outerWidth/outerHeight
+  canvas_noise: true               # deterministic per-identity canvas noise (edge pixels only)
+  audio_noise: true                # deterministic per-identity AudioBuffer noise
+  webrtc_ip_policy: disable_non_proxied_udp   # stop WebRTC leaking the host IP
+
+# -------------------------------------------------------------------- profiles
+profiles_file: profiles.yaml       # relative to this file; inline `profiles:` also works
+
+# --------------------------------------------------------------------- proxies
+# One entry per Gluetun container (see docker-compose.yml). Hostnames resolve
+# on the compose network; when running scrapebot on the host, publish the
+# ports and point these at 127.0.0.1 instead.
+proxies:
+  gluetun:
+    - name: vpn-1
+      proxy_url: ${GLUETUN_1_PROXY:-http://gluetun-1:8888}
+      control_url: ${GLUETUN_1_CONTROL:-http://gluetun-1:8000}
+      username: ${GLUETUN_PROXY_USER:-}
+      password: ${GLUETUN_PROXY_PASSWORD:-}
+      api_key: ${GLUETUN_API_KEY:-}
+    - name: vpn-2
+      proxy_url: ${GLUETUN_2_PROXY:-http://gluetun-2:8888}
+      control_url: ${GLUETUN_2_CONTROL:-http://gluetun-2:8000}
+      username: ${GLUETUN_PROXY_USER:-}
+      password: ${GLUETUN_PROXY_PASSWORD:-}
+      api_key: ${GLUETUN_API_KEY:-}
+    - name: vpn-3
+      proxy_url: ${GLUETUN_3_PROXY:-http://gluetun-3:8888}
+      control_url: ${GLUETUN_3_CONTROL:-http://gluetun-3:8000}
+      username: ${GLUETUN_PROXY_USER:-}
+      password: ${GLUETUN_PROXY_PASSWORD:-}
+      api_key: ${GLUETUN_API_KEY:-}
+  static: []                       # [{name, url, username, password, timezone}] e.g. a residential gateway
+  allow_direct: false              # true = permit scraping from this machine's own IP
+  max_sessions_per_proxy: 1        # concurrent browser sessions sharing one exit IP
+  rotate_on_block: true            # restart the VPN (new exit IP) when an identity gets blocked
+  rotate_every_pages: 0            # also rotate proactively every N pages (0 = off)
+  min_rotation_interval_s: 60
+  rotation_timeout_s: 120
+  health_check_interval_s: 120
+  unhealthy_after_failures: 3
+
+# ---------------------------------------------------------------------- limits
+limits:
+  max_pages_total: 500             # per run; the queue resumes next run
+  max_pages_per_hour: 300          # fleet-wide, persisted across restarts
+  max_pages_per_day: 3000          # fleet-wide, persisted across restarts
+  per_domain:
+    requests_per_minute: 12
+    burst: 2
+    max_concurrency: 2
+  domain_overrides: {}             # {"example.com": {requests_per_minute: 4, burst: 1, max_concurrency: 1}}
+  per_identity_pages_per_hour: 40
+  pages_per_session: 25            # recycle browser + identity after N pages
+  delay_s: [3, 8]                  # random pause between pages, per worker
+  max_retries: 3
+  retry_backoff_s: 30              # exponential: 30s, 60s, 120s, ...
+  identity_cooldown_s: 1800        # bench a blocked identity this long
+  rate_limit_pause_s: 120          # domain pause on 429 without Retry-After
+  respect_robots_txt: true         # skip URLs disallowed by robots.txt (fetched via the proxy)
+  robots_user_agent: "*"
+  circuit_breaker:
+    window: 20
+    min_samples: 8
+    block_ratio: 0.5               # >=50% of the last 20 fetches blocked -> pause fleet
+    pause_s: 900
+
+# ------------------------------------------------------------------- detection
+detection:
+  block_status: [401, 403, 407, 451]
+  rate_limit_status: [429]
+  retry_status: [500, 502, 503, 504, 520, 522, 524]
+  not_found_status: [404, 410]
+  challenge_wait_s: 20             # let JS interstitials ("Just a moment...") finish
+  # challenge_markers / block_markers: defaults cover Cloudflare, Akamai,
+  # Imperva/Incapsula, DataDome, PerimeterX, Kasada. Override to customize.
+
+# -------------------------------------------------------------------- behavior
+behavior:
+  humanize: true
+  mouse_moves: [2, 5]
+  scrolls: [1, 4]
+  dwell_s: [1.5, 4.0]
+  warmup_urls: ["https://quotes.toscrape.com/"]   # visited first in each new session
+
+# --------------------------------------------------------------------- targets
+targets:
+  - name: quotes
+    start_urls: ["https://quotes.toscrape.com/page/1/"]
+    # url_file: urls.txt           # one URL per line, relative to this file
+    wait_for: ".quote"
+    item_selector: ".quote"
+    fields:
+      text: ".text"
+      author: ".author"
+      tags: {selector: ".tag", multiple: true}
+      author_url: {selector: "a[href^='/author/']", attr: href}
+    next_page: {selector: "li.next a", max_pages: 5}
+    follow: {selector: "a[href^='/author/']", target: authors, max_depth: 1, limit_per_page: 5}
+
+  - name: authors
+    wait_for: ".author-details"
+    fields:
+      name: ".author-title"
+      born_date: ".author-born-date"
+      born_location: ".author-born-location"
+      description: ".author-description"
+    # extractor: "examples.custom_extractor:extract"   # optional Python hook
+
+output:
+  dir: null                        # default: <data_dir>/output -> <target>.jsonl
+  include_metadata: true
